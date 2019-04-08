@@ -196,4 +196,123 @@ printf("the sharing address is %p\n",shm_ptr);
 * 造成msgrcv()阻塞的情况:<br>
 没有消息被写入队列时，接收方发生阻塞，等待消息发送方发送消息，直到超出规定时间结束。
 * 造成msgsnd()等待的条件:<br>
-当前消息大小与当前消息队列中的字节数之和超过了消息队列的总容量；当前消息队列的消息数大于等于消息队列的总容量。
+当前消息大小与当前消息队列中的字节数之和超过了消息队列的总容量；当前消息队列的消息数大于等于消息队列的总容量。<br>
+5）阅读Pintos操作系统，找到并阅读进程上下文切换的代码，说明实现的保存和恢复的上下文内容以及进程切换的工作流程。<br>
+上下文切换（Context Switch） 或者环境切换在操作系统中，CPU切换到另一个进程需要保存当前进程的状态并恢复另一个进程的状态：当前运行任务转为就绪（或者挂起、删除）状态，另一个被选定的就绪任务成为当前任务。上下文切换包括保存当前任务的运行环境，恢复将要运行任务的运行环境。进程上下文用进程的PCB（进程控制块,也称为PCB，即任务控制块）表示，它包括进程状态，CPU寄存器的值等。通常通过执行一个状态保存来保存CPU当前状态，然后执行一个状态恢复重新开始运行。<br>
+上下文切换的开销：
+* 保存和恢复寄存器
+* 切换地址空间（相关指令可能比较昂贵）
+* 缓存和缓冲失效（高速缓存，缓冲区缓存，TLB）
+schdule代码：<br>
+```
+  /* Schedules a new process.  At entry, interrupts must be off and
+     the running process's state must have been changed from
+     running to some other state.  This function finds another
+     thread to run and switches to it.
+  
+     It's not safe to call printf() until thread_schedule_tail()
+     has completed. */
+  static void
+  schedule (void)
+ {
+   struct thread *cur = running_thread ();
+   struct thread *next = next_thread_to_run ();
+   struct thread *prev = NULL;
+ 
+   ASSERT (intr_get_level () == INTR_OFF);
+   ASSERT (cur->status != THREAD_RUNNING);
+   ASSERT (is_thread (next));
+ 
+   if (cur != next)
+     prev = switch_threads (cur, next);
+   thread_schedule_tail (prev);
+}
+```
+首先获取当前线程cur和调用next_thread_to_run获取下一个要run的线程：<br>
+```
+  /* Chooses and returns the next thread to be scheduled.  Should
+     return a thread from the run queue, unless the run queue is
+     empty.  (If the running thread can continue running, then it
+     will be in the run queue.)  If the run queue is empty, return
+     idle_thread. */
+  static struct thread *
+  next_thread_to_run (void)
+  {
+    if (list_empty (&ready_list))
+     return idle_thread;
+   else
+     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+ }
+```
+如果就绪队列空闲直接返回一个空闲线程指针， 否则拿就绪队列第一个线程出来返回。然后3个断言确保不能被中断， 当前线程是RUNNING_THREAD等。如果当前线程和下一个要跑的线程不是同一个的话调用switch_threads返回给prev。<br>
+```
+1 /* Switches from CUR, which must be the running thread, to NEXT,
+2    which must also be running switch_threads(), returning CUR in
+3    NEXT's context. */
+4 struct thread *switch_threads (struct thread *cur, struct thread *next);
+```
+注意， 这个函数实现是用汇编语言实现的在threads/switch.S里：<br>
+```
+ 1 #### struct thread *switch_threads (struct thread *cur, struct thread *next);
+ 2 ####
+ 3 #### Switches from CUR, which must be the running thread, to NEXT,
+ 4 #### which must also be running switch_threads(), returning CUR in
+ 5 #### NEXT's context.
+ 6 ####
+ 7 #### This function works by assuming that the thread we're switching
+ 8 #### into is also running switch_threads().  Thus, all it has to do is
+ 9 #### preserve a few registers on the stack, then switch stacks and
+10 #### restore the registers.  As part of switching stacks we record the
+11 #### current stack pointer in CUR's thread structure.
+12 
+13 .globl switch_threads
+14 .func switch_threads
+15 switch_threads:
+16     # Save caller's register state.
+17     #
+18     # Note that the SVR4 ABI allows us to destroy %eax, %ecx, %edx,
+19     # but requires us to preserve %ebx, %ebp, %esi, %edi.  See
+20     # [SysV-ABI-386] pages 3-11 and 3-12 for details.
+21     #
+22     # This stack frame must match the one set up by thread_create()
+23     # in size.
+24     pushl %ebx
+25     pushl %ebp
+26     pushl %esi
+27     pushl %edi
+28 
+29     # Get offsetof (struct thread, stack).
+30 .globl thread_stack_ofs
+31     mov thread_stack_ofs, %edx
+32 
+33     # Save current stack pointer to old thread's stack, if any.
+34     movl SWITCH_CUR(%esp), %eax
+35     movl %esp, (%eax,%edx,1)
+36 
+37     # Restore stack pointer from new thread's stack.
+38     movl SWITCH_NEXT(%esp), %ecx
+39     movl (%ecx,%edx,1), %esp
+40 
+41     # Restore caller's register state.
+42     popl %edi
+43     popl %esi
+44     popl %ebp
+45     popl %ebx
+46         ret
+47 .endfunc
+```
+ 分析一下这个汇编代码： 先4个寄存器压栈保存寄存器状态（保护作用）， 这4个寄存器是switch_threads_frame的成员：<br>
+ ```
+  /* switch_thread()'s stack frame. */
+  struct switch_threads_frame 
+    {
+      uint32_t edi;               /*  0: Saved %edi. */
+      uint32_t esi;               /*  4: Saved %esi. */
+      uint32_t ebp;               /*  8: Saved %ebp. */
+      uint32_t ebx;               /* 12: Saved %ebx. */
+      void (*eip) (void);         /* 16: Return address. */
+      struct thread *cur;         /* 20: switch_threads()'s CUR argument. */
+     struct thread *next;        /* 24: switch_threads()'s NEXT argument. */
+   };
+```
+然后全局变量thread_stack_ofs记录线程和棧之间的间隙， 线程切换有个保存现场的过程，来看34,35行， 先把当前的线程指针放到eax中， 并把线程指针保存在相对基地址偏移量为edx的地址中。38,39： 切换到下一个线程的线程棧指针， 保存在ecx中， 再把这个线程相对基地址偏移量edx地址（上一次保存现场的时候存放的）放到esp当中继续执行。这里ecx, eax起容器的作用， edx指向当前现场保存的地址偏移量。简单来说就是保存当前线程状态， 恢复新线程之前保存的线程状态。然后再把4个寄存器拿出来， 这个是硬件设计要求的， 必须保护switch_threads_frame里面的寄存器才可以destroy掉eax, edx, ecx。然后注意到现在eax(函数返回值是eax)就是被切换的线程棧指针。由此得到一个结论， schedule先把当前线程丢到就绪队列，然后把线程切换如果下一个线程和当前线程不一样的话。
