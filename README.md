@@ -14,57 +14,57 @@ sem_post:挂出共享资源，成功返回0，不成功返回-1。<br>
 ```
 int main(int argc, char *argv[])
 {
-p1 = sem_open("p1",O_CREAT,0666,0);
-p2 = sem_open("p2",O_CREAT,0666,0);
-p3 = sem_open("p3",O_CREAT,0666,0);
-p4 = sem_open("p4",O_CREAT,0666,1);
-if (fork() == 0)
-{
-printf("I am the proccess P1\n");
-sem_post(p1);
-sem_post(p1);
-}
-else
-{
-if (fork() == 0)
-{
-sem_wait(p1);
-sem_wait(p4);
-printf("I am the proccess P2\n");
-sem_post(p4);
-sem_post(p2);
-}
-else
-{
-if (fork() == 0)
-{
-sem_wait(p1);
-sem_wait(p4);
-printf("I am the proccess P3\n");
-sem_post(p4);
-sem_post(p3);
-}
-else
-{
-if (fork() == 0)
-{
-sem_wait(p2);
-sem_wait(p3);
-printf("I am the proccess P4\n");
-}
-}
-}
-}
-sem_close(p1);
-sem_close(p2);
-sem_close(p3);
-sem_close(p4);
+      p1 = sem_open("p1",O_CREAT,0666,0);
+      p2 = sem_open("p2",O_CREAT,0666,0);
+      p3 = sem_open("p3",O_CREAT,0666,0);
+      p4 = sem_open("p4",O_CREAT,0666,1);
+      if (fork() == 0)
+      {
+            printf("I am the proccess P1\n");
+            sem_post(p1);
+            sem_post(p1);
+      }
+      else
+     {
+            if (fork() == 0)
+            {
+                  sem_wait(p1);
+                  sem_wait(p4);
+                  printf("I am the proccess P2\n");
+                  sem_post(p4);
+                  sem_post(p2);
+            }
+           else
+           {
+                  if (fork() == 0)          
+	         {
+                        sem_wait(p1);
+                        sem_wait(p4);
+                        printf("I am the proccess P3\n");
+                        sem_post(p4);
+                        sem_post(p3);
+                 }
+                 else
+                {
+                        if (fork() == 0)
+                       {
+                             sem_wait(p2);
+                             sem_wait(p3);
+                             printf("I am the proccess P4\n");
+                       }
+                }
+          }
+ }
+      sem_close(p1);
+      sem_close(p2);
+      sem_close(p3);
+      sem_close(p4);
 
-sem_unlink("p1");
-sem_unlink("p2");
-sem_unlink("p3");
-sem_unlink("p4");
-return 0;
+      sem_unlink("p1");
+      sem_unlink("p2");
+      sem_unlink("p3");
+      sem_unlink("p4");
+      return 0;
 }
 
 ```
@@ -165,7 +165,7 @@ void *worker2(void *arg) {
 }
 ```
 执行结果:<br>
-![image]()<br><br>
+![image](https://github.com/16281022/-_16281022/blob/master/os3_5.png)<br><br>
 4）（下面两个题目，选做一个）<br>
 （1）在Pinto操作系统中，增加一个系统调用，系统调用名为test_system_call()。无输入参数，输出为在显示器中打印输出：Hello. This is my test system call. <br>
 （2）进程通信问题。阅读并运行共享内存、管道、消息队列三种机制的代码<br>
